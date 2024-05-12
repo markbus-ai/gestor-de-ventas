@@ -217,41 +217,43 @@ def salir():
 ventana_principal = Tk()
 ventana_principal.geometry("600x400")
 ventana_principal.title("Gestor de productos y ventas")
-ventana_principal.config(bg="black")
+ventana_principal.config(bg="#D0D3D3")
 
 
 btn1 = Button(ventana_principal, text="Agregar objeto", command=agregar_objeto)
 btn1.place(x="310px",y="26px",height="55px",width="187px")
-btn1.config(bg="#56E63D",fg="black")
+btn1.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 
 btn2 = Button(ventana_principal, text="mostrar productos", command=mostrar_productos)
 btn2.place(x="505px",y="26px",height="55px",width="187px")
-btn2.config(bg="#56E63D",fg="black")
+btn2.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn3 = Button(ventana_principal, text="eliminar producto", command=ventana_para_borrar)
 btn3.place(x="310px",y="118px",height="55px",width="187px")
-btn3.config(bg="#56E63D",fg="black")
+btn3.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn4 = Button(ventana_principal, text="consulta  producto", command=ventana_consulta_producto)
 btn4.place(x="505px",y="118px",height="55px",width="187px")
-btn4.config(bg="#56E63D",fg="black")
+btn4.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn5 = Button(ventana_principal, text="venta total", command=lambda: venta_total(ventana_principal))
 btn5.place(x="310px",y="210px",height="55px",width="187px")
-btn5.config(bg="#56E63D",fg="black")
+btn5.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn6 = Button(ventana_principal, text="venta por producto", command=ventana_venta_producto)
 btn6.place(x="505px",y="210px",height="55px",width="187px")
-btn6.config(bg="#56E63D",fg="black")
+btn6.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn7 = Button(ventana_principal, text="actualizar producto", command=ventana_actualizar_producto)
 btn7.place(x="310px",y="302px",height="55px",width="187px")
-btn7.config(bg="#56E63D",fg="black")
+btn7.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
 
 btn8 = Button(ventana_principal, text="exit", command=salir)
 btn8.place(x="505px",y="302px",height="55px",width="187px")
 btn8.config(bg="#E63D3D",fg="black")
+
+
 
 
 
