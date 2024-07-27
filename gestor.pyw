@@ -1,260 +1,404 @@
-from tkinter import *
-import time
+from customtkinter import *
+import customtkinter
+from tkinter import messagebox, ttk
+import tkinter as tk
+import subprocess
+import requests
+import threading
+import re
 
-file_name = "markbusking_shop.txt"
+set_appearance_mode("light")
 
-def mostrar_productos():
-    # Mostrar todos los productos
-    with open(file_name, "a+") as file:
-        file.seek(0)  # Coloca el puntero al inicio del archivo
-        objetos = file.read()  # Muestra todo el contenido
-        lbl_objetos = Label(ventana_principal,text=objetos,bg="#5FDCC9",fg="black")
-        lbl_objetos.place(x="850px", y="0")
+# Establecer el tema de colores y la fuente
+COLOR_FONDO = "#020936"
+COLOR_TEXTO = "#FFFFFF"
+COLOR_BOTONES = "#071A99"
+FUENTE_TEXTO = ("Arial", 12)
 
+# Función para mostrar la barra de progreso
+def barra_de_carga(parent):
+    global lbl_general, progressbar, lbl
 
-#funcion para escribir los objetos en el archivo
-def guardar_objeto(name,cantidad,precio):
-    with open(file_name, "a+") as file:
-        try:
-            file.write(f"{name}, {cantidad}, {precio}\n")
-            return "producto agregado"
-        except:
-            return "no se ha podido agregar"
+    lbl_general = tk.LabelFrame(parent, bg="white", bd=2)
+    lbl_general.place(relx=0.5, rely=0.5, anchor='center', width=300, height=100)
 
+    progressbar = ttk.Progressbar(lbl_general, mode="indeterminate")
+    progressbar.start(10)
+    progressbar.pack(pady=20)
 
-#funcion para definir que objeto agregar al archivo
-def agregar_objeto():
-    
-    #dimensiones de la ventana para escribir el objeto
-    ventana_agregar_objeto = Toplevel()
-    ventana_agregar_objeto.geometry("250x180")
-    
-    
-    with open(file_name, "a+") as file:
-        lbl1 = Label(ventana_agregar_objeto,text="Ingrese el nombre del producto:")
-        lbl1.pack()
-        #campo donde poner nombre del producto
-        name = Entry(ventana_agregar_objeto)
-        name.pack()
-        
-        lbl2 = Label(ventana_agregar_objeto,text="Cantidad vendida: ")
-        lbl2.pack()
-        
-        #campo donde poner la cantidad del producto
-        cantidad = Entry(ventana_agregar_objeto)
-        cantidad.pack()
-        
-        lbl3 = Label(ventana_agregar_objeto,text="precio")
-        lbl3.pack()
-        
-        #campo para poner el precio del objeto
-        precio = Entry(ventana_agregar_objeto)
-        precio.pack()
-        
-        #boton para escribir todo los datos del objeto en el archivo
-        sumbit = Button(ventana_agregar_objeto,text="sumbit", command=lambda: guardar_objeto(name.get(),cantidad.get(),precio.get()))
-        sumbit.pack()
-
-
-def ventana_para_borrar():
-    ventana_borrar = Toplevel()
-    ventana_borrar.geometry("250x150")
-    
-    lbl = Label(ventana_borrar,text="Nombre del producto a eliminar")
+    lbl = tk.Label(lbl_general, text="Cargando...")
+    lbl.config(bg="white", fg="black", borderwidth=2)
     lbl.pack()
+
+# Función para ejecutar tareas en segundo plano
+def run_in_background(func, *args, **kwargs):
+    threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True).start()
+
+# Función para instalar un paquete
+def instalar_paquete():
+    paquete = entrada_paquete.get()
+    if not paquete:
+        messagebox.showerror("Error", "Por favor, ingrese el nombre del paquete.")
+        return
     
-    nombre = Entry(ventana_borrar)
-    nombre.pack()
+    barra_de_carga(frame_derecho)
+    run_in_background(instalar_paquete_thread, paquete)
+
+def instalar_paquete_thread(paquete):
+    try:
+        result = subprocess.run(['pip', 'install', paquete], capture_output=True, text=True, check=True)
+        print(result.stdout)
+        root.after(0, lambda: messagebox.showinfo("Instalación", f"El paquete '{paquete}' ha sido instalado."))
+        root.after(0, actualizar_list_paquetes_instalados)
+    except subprocess.CalledProcessError as e:
+        error_message = e.stderr.lower()
+        if "found existing installation" in error_message or "requirement already satisfied" in error_message:
+            root.after(0, lambda: messagebox.showinfo("Instalación", f"{paquete} ya está instalado."))
+        elif "no matching distribution found" in error_message:
+            root.after(0, lambda: messagebox.showerror("Error", f"{paquete} no fue encontrado"))
+        elif "invalid requirement" in error_message:
+            root.after(0, lambda: messagebox.showerror("Error", f"Requisito inválido: {paquete}"))
+        else:
+            root.after(0, lambda: messagebox.showerror("Error", f"Error al instalar {paquete}: {e.stderr}"))
+        print(e.stderr)
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
+
+# Función para desinstalar un paquete
+def desinstalar_paquete():
+    paquete = entrada_paquete.get()
+    if not paquete:
+        messagebox.showerror("Error", "Por favor, ingrese el nombre del paquete.")
+        return
     
-    sumbit = Button(ventana_borrar, text="sumbit", command=lambda: eliminar_producto(nombre.get()))
-    sumbit.pack()
+    barra_de_carga(frame_derecho)
+    run_in_background(desinstalar_paquete_thread, paquete)
 
+def desinstalar_paquete_thread(paquete):
+    try:
+        result = subprocess.run(['pip', 'uninstall', '-y', paquete], capture_output=True, text=True, check=True)
+        output = result.stdout.strip()
+        print(output)
+        if "Successfully uninstalled" in output:
+            root.after(0, lambda: messagebox.showinfo("Desinstalación", f"El paquete '{paquete}' ha sido desinstalado."))
+            root.after(0, actualizar_list_paquetes_instalados)
+        elif "is not installed" in output:
+            root.after(0, lambda: messagebox.showinfo("Desinstalación", f"El paquete '{paquete}' no está instalado."))
+        else:
+            root.after(0, lambda: messagebox.showinfo("Desinstalación", output))
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al desinstalar el paquete '{paquete}': {e.stderr}"))
+        print(e.stderr)
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
+# Función para actualizar la lista de paquetes instalados
+def actualizar_list_paquetes_instalados():
+    list_paquetes_instalados.delete(0, tk.END)
+    for paquete in paquetes_predeterminados:
+        list_paquetes_instalados.insert(tk.END, paquete)
 
+# Función para instalar un paquete desde la lista
+def instalar_paquete_lista(event):
+    index = list_paquetes_instalados.curselection()
+    if index:
+        paquete = list_paquetes_instalados.get(index)
+        entrada_paquete.delete(0, tk.END)
+        entrada_paquete.insert(0, paquete)
+        instalar_paquete()
 
-def eliminar_producto(nombre_producto: str):
-    nueva_lista = []
-    with open(file_name, "r+") as file:
-        lines = file.readlines()
-        for line in lines:
-            if nombre_producto not in line:
-                nueva_lista.append(line)
-        # Rebobinar el archivo al inicio
-        file.seek(0)
-        # Eliminar todas las líneas que contengan el producto
-        for line in nueva_lista:
-            file.write(line)
-        # Eliminar líneas vacías al final del archivo
-        file.truncate()
+# Función para actualizar la lista de mis paquetes instalados
+def actualizar_mis_paquetes():
+    barra_de_carga(frame_mis_paquetes_instalados)
+    run_in_background(actualizar_mis_paquetes_thread)
 
-def consultar_producto(name: str, ventana_consulta_producto):
-    with open(file_name, "r") as file:
-        product_found = False
-        for line in file:
-            # Verificar si el nombre del producto (sin importar mayúsculas o minúsculas) está presente en la línea
-            if name.lower() in line.lower():
-                product_found = True
-                # Crear un widget Label para mostrar la información del producto
-                lbl = Label(ventana_consulta_producto, text=line.strip())
-                lbl.pack()
-                break  # Salir del bucle después de encontrar una coincidencia
+def actualizar_mis_paquetes_thread():
+    try:
+        paquetes = subprocess.run(['pip', 'list', '--format=freeze'], capture_output=True, text=True, check=True)
+        paquetes_list = paquetes.stdout.split('\n')
+        root.after(0, lambda: mis_paquetes_instalados.delete(0, tk.END))
+        for item in paquetes_list:
+            if item:
+                root.after(0, lambda i=item: mis_paquetes_instalados.insert(tk.END, i))
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al obtener la lista de paquetes: {e.stderr}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
-        if not product_found:
-            # Mostrar un mensaje si el producto no se encuentra
-            no_product_label = Label(ventana_consulta_producto, text="Producto no encontrado")
-            no_product_label.pack()
-            ventana_principal.after(3000, no_product_label.destroy)
+# Función para exportar la lista de paquetes a un archivo
+def exportar():
+    barra_de_carga(frame_mis_paquetes_instalados)
+    run_in_background(exportar_thread)
 
+def exportar_thread():
+    try:
+        with open("requirements.txt", "w") as archivo:
+            paquetes = subprocess.run(['pip', 'freeze'], capture_output=True, text=True, check=True)
+            archivo.writelines(paquetes.stdout)
+        root.after(0, lambda: messagebox.showinfo("Exportación", "Exportado exitosamente a requirements.txt"))
+    except Exception as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al exportar: {str(e)}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
-def ventana_consulta_producto():
-    ventana_consulta = Toplevel()
-    ventana_consulta.geometry("250x150")
+# Función para actualizar un paquete
+def actualizar_paquete():
+    paquete = entrada_paquete.get()
+    if not paquete:
+        messagebox.showerror("Error", "Por favor, ingrese el nombre del paquete.")
+        return
     
-    lbl = Label(ventana_consulta,text="Nombre del producto")
-    lbl.pack()
-    
-    nombre = Entry(ventana_consulta)
-    nombre.pack()
-    
-    sumbit = Button(ventana_consulta, text="sumbit", command=lambda: consultar_producto(nombre.get(), ventana_consulta))
-    sumbit.pack()
+    barra_de_carga(frame_derecho)
+    run_in_background(actualizar_paquete_thread, paquete)
+
+def actualizar_paquete_thread(paquete):
+    try:
+        result = subprocess.run(['pip', 'install', '--upgrade', paquete], capture_output=True, text=True, check=True)
+        print(result.stdout)
+        root.after(0, lambda: messagebox.showinfo("Actualización", f"El paquete '{paquete}' ha sido actualizado."))
+        root.after(0, actualizar_list_paquetes_instalados)
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al actualizar el paquete '{paquete}': {e.stderr}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
+
+# Función para buscar paquetes en PyPI
+def buscar_paquetes():
+    termino = entrada_busqueda.get()
+    if termino:
+        barra_de_carga(frame_busqueda)
+        run_in_background(buscar_paquetes_thread, termino)
+
+def buscar_paquetes_thread(termino):
+    try:
+        url = f"https://pypi.org/pypi/{termino}/json"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            nombre_paquete = data["info"]["name"]
+            version_paquete = data["info"]["version"]
+            descripcion_paquete = data["info"]["summary"]
+            root.after(0, lambda: resultado_busqueda.set(f"{nombre_paquete} ({version_paquete}): {descripcion_paquete}"))
+        else:
+            root.after(0, lambda: resultado_busqueda.set("Paquete no encontrado."))
+    except Exception as e:
+        root.after(0, lambda: resultado_busqueda.set(f"Error al buscar: {str(e)}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
+
+# Función para actualizar las sugerencias en el Listbox
+def actualizar_sugerencias(event):
+    termino = entrada_busqueda.get().lower()
+    sugerencias = [paquete for paquete in paquetes_predeterminados if termino in paquete.lower()]
+    listbox_sugerencias.delete(0, tk.END)
+    for sugerencia in sugerencias[:10]:  # Limitar a 10 sugerencias
+        listbox_sugerencias.insert(tk.END, sugerencia)
+    if sugerencias:
+        listbox_sugerencias.place(relx=0.5, rely=0.3, anchor='n', width=200)
+    else:
+        listbox_sugerencias.place_forget()
+
+# Función para completar el campo de entrada con la selección del Listbox
+def completar_sugerencia(event):
+    seleccion = listbox_sugerencias.curselection()
+    if seleccion:
+        entrada_busqueda.delete(0, tk.END)
+        entrada_busqueda.insert(0, listbox_sugerencias.get(seleccion))
+        listbox_sugerencias.place_forget()
+
+# Configuración de la ventana principal
+root = CTk()
+root.title("Gestor de Paquetes pip")
+root.configure(bg=COLOR_FONDO)
+root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}")
+
+# Crear un ttk.Notebook
+notebook_principal = ttk.Notebook(root)
+notebook_principal.pack(fill='both', expand=True)
+
+# Estilo para los frames
+style = ttk.Style()
+style.configure("TFrame", background=COLOR_FONDO)
+
+# Pestaña para instalar/desinstalar
+frame_derecho = ttk.Frame(notebook_principal, style="TFrame")
+notebook_principal.add(frame_derecho, text="Instalar/Desinstalar")
+
+# Etiquetas y entradas para el nombre del paquete
+etiqueta = tk.Label(frame_derecho, text="Ingrese el nombre del paquete:", background=COLOR_FONDO, foreground=COLOR_TEXTO, font=FUENTE_TEXTO)
+etiqueta.pack(pady=10)
+entrada_paquete = CTkEntry(frame_derecho, font=FUENTE_TEXTO)
+entrada_paquete.pack(pady=5)
+
+# Crear botones para instalar, desinstalar y actualizar paquetes
+boton_instalar = CTkButton(frame_derecho, text="Instalar", command=instalar_paquete)
+boton_instalar.pack(pady=5)
+boton_desinstalar = CTkButton(frame_derecho, text="Desinstalar", command=desinstalar_paquete)
+boton_desinstalar.pack(pady=5)
+boton_actualizar = CTkButton(frame_derecho, text="Actualizar", command=actualizar_paquete)
+boton_actualizar.pack(pady=5)
+
+# Pestaña para mostrar la lista de paquetes instalados
+frame_lateral = ttk.Frame(notebook_principal, style="TFrame")
+notebook_principal.add(frame_lateral, text="Paquetes Instalados")
+
+# Crear otro ttk.Notebook para mostrar los paquetes instalados
+notebook_secundario = ttk.Notebook(frame_lateral)
+notebook_secundario.pack(fill='both', expand=True)
+
+# Frame para mostrar los paquetes predeterminados
+frame_paquetes_instalados = ttk.Frame(notebook_secundario, style="TFrame")
+notebook_secundario.add(frame_paquetes_instalados, text="Instalar Paquetes")
+
+# Listbox para mostrar paquetes instalados
+list_paquetes_instalados = tk.Listbox(frame_paquetes_instalados, bg=COLOR_FONDO, fg=COLOR_TEXTO, font=FUENTE_TEXTO, selectbackground=COLOR_BOTONES)
+list_paquetes_instalados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+list_paquetes_instalados.bind("<<ListboxSelect>>", instalar_paquete_lista)
+
+# Frame para mostrar mis paquetes instalados
+frame_mis_paquetes_instalados = ttk.Frame(notebook_secundario, style="TFrame")
+notebook_secundario.add(frame_mis_paquetes_instalados, text="Mis Paquetes")
+
+# Listbox para mostrar mis paquetes instalados
+mis_paquetes_instalados = tk.Listbox(frame_mis_paquetes_instalados, bg=COLOR_FONDO, fg=COLOR_TEXTO, font=FUENTE_TEXTO, selectbackground=COLOR_BOTONES)
+mis_paquetes_instalados.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+# Botón para exportar la lista de paquetes instalados
+boton_exportar = CTkButton(frame_mis_paquetes_instalados, text="Exportar", command=exportar)
+boton_exportar.pack(pady=10)
+
+# Botón para actualizar la lista de paquetes instalados
+boton_actualizar_lista = CTkButton(frame_mis_paquetes_instalados, text="Actualizar Lista", command=actualizar_mis_paquetes)
+boton_actualizar_lista.pack(pady=10)
+
+# Pestaña para buscar paquetes en PyPI
+frame_busqueda = ttk.Frame(notebook_principal, style="TFrame")
+notebook_principal.add(frame_busqueda, text="Buscar en PyPI")
+
+# Etiqueta y entrada para buscar en PyPI
+etiqueta_busqueda = tk.Label(frame_busqueda, text="Buscar paquete en PyPI:", background=COLOR_FONDO, foreground=COLOR_TEXTO, font=FUENTE_TEXTO)
+etiqueta_busqueda.pack(pady=10)
+entrada_busqueda = CTkEntry(frame_busqueda, font=FUENTE_TEXTO)
+entrada_busqueda.pack(pady=5)
+entrada_busqueda.bind('<KeyRelease>', actualizar_sugerencias)
+entrada_busqueda.bind('<FocusOut>', lambda e: root.after(100, listbox_sugerencias.place_forget))
+entrada_busqueda.bind('<FocusIn>', actualizar_sugerencias)
+
+# Listbox para mostrar sugerencias de búsqueda
+listbox_sugerencias = tk.Listbox(frame_busqueda, bg=COLOR_FONDO, fg=COLOR_TEXTO, font=FUENTE_TEXTO, selectbackground=COLOR_BOTONES)
+listbox_sugerencias.bind("<<ListboxSelect>>", completar_sugerencia)
+listbox_sugerencias.place_forget()
+
+# Botón para buscar en PyPI
+boton_buscar = CTkButton(frame_busqueda, text="Buscar", command=buscar_paquetes)
+boton_buscar.pack(pady=10)
+
+# Etiqueta para mostrar resultados de búsqueda
+resultado_busqueda = tk.StringVar()
+resultado_label = tk.Label(frame_busqueda, textvariable=resultado_busqueda, background=COLOR_FONDO, foreground=COLOR_TEXTO, font=FUENTE_TEXTO, wraplength=400)
+resultado_label.pack(pady=10)
+
+# Lista de paquetes predeterminados
+paquetes_predeterminados = [
+    "absl-py", "aiohttp", "alabaster", "altair", "argparse", "asgiref", "astropy",
+    "asyncio", "attrs", "beautifulsoup4", "bokeh", "boto3", "bottle", "celery",
+    "certifi", "chainer", "chardet", "click", "cloudpickle", "Cython", "dash",
+    "dask", "dataclasses", "decorator", "dill", "Django", "Flask", "gensim",
+    "geopandas", "google-auth", "google-cloud-storage", "grpcio", "gunicorn",
+    "h5py", "h2o", "idna", "imageio", "ipython", "ipywidgets", "jedi", "Jinja2",
+    "joblib", "jsonschema", "Keras", "kiwisolver", "kornia", "lightgbm", "lxml",
+    "matplotlib", "mistune", "mkl", "mxnet", "networkx", "nltk", "notebook",
+    "numba", "numpy", "nvidia-ml-py3", "opencv-python", "openpyxl", "optuna",
+    "pandas", "Pillow", "pip", "plotly", "pluggy", "protobuf", "psutil",
+    "psycopg2", "pytest", "pytz", "PyYAML", "requests", "retrying",
+    "scikit-image", "scikit-learn", "scipy", "seaborn", "selenium", "sklearn",
+    "spacy", "SQLAlchemy", "statsmodels", "sympy", "tabulate", "tbb", "tensorboard",
+    "tensorflow", "termcolor", "tornado", "tqdm", "twisted", "typing-extensions",
+    "urllib3", "virtualenv", "Werkzeug", "wordcloud", "wxPython", "xgboost",
+    "xlrd", "XlsxWriter", "xlwt", "yarl", "bcrypt", "blinker", "bson", "cairocffi",
+    "cryptography", "cycler", "dataclasses-json", "docopt", "ecdsa", "email-validator",
+    "filelock", "gensim", "google-api-python-client", "greenlet", "httpx", "hyperopt",
+    "iso8601", "json5", "loguru", "matplotlib-venn", "mypy", "nltk", "openai", "orjson",
+    "passlib", "pillow", "pipenv", "poetry", "praw", "pybind11", "pydantic", "pygments",
+    "pyjwt", "pymongo", "pyparsing", "pyrsistent", "python-dateutil", "python-dotenv",
+    "pytube", "pyyaml", "regex", "rich", "scikit-optimize", "setuptools", "shap",
+    "six", "snorkel", "soundfile", "sqlparse", "starlette", "subprocess", "textblob",
+    "toml", "transformers", "twilio", "ujson", "uvicorn", "watchdog", "websockets",
+    "xlutils", "yfinance", "youtube-dl", "pyautogui"
+]
 
 
-def venta_total(ventana_principal):
-    # Calcular venta total
-    with open(file_name, "r") as file:
-        lines = file.readlines()[1:]  # Lee todas las líneas del archivo excepto la primera
-        total = 0
-        for line in lines:
-            columnas = line.strip().split(",")
-            cantidad = int(columnas[1])
-            precio = float(columnas[2])
-            total += cantidad * precio
-        venta_label = Label(ventana_principal, text=f"El total es: {total}")
-        venta_label.pack()
-        
-        ventana_principal.after(5000, venta_label.destroy)
+# Función para verificar actualizaciones disponibles
+def verificar_actualizaciones():
+    barra_de_carga(frame_mis_paquetes_instalados)
+    run_in_background(verificar_actualizaciones_thread)
 
-def ventana_venta_producto():
-    ventana__producto = Toplevel()
-    ventana__producto.geometry("200x200")
-    
-    lbl_producto = Label(ventana__producto, text="Nombre del producto:")
-    lbl_producto.pack()
-    
-    nombre = Entry(ventana__producto)
-    nombre.pack()
-    
-    sumbit = Button(ventana__producto, text="sumbit", command=lambda: venta_producto(nombre.get(), ventana__producto))
-    sumbit.pack()
+def verificar_actualizaciones_thread():
+    try:
+        result = subprocess.run(['pip', 'list', '--outdated', '--format=json'], capture_output=True, text=True, check=True)
+        paquetes_desactualizados = json.loads(result.stdout)
+        if paquetes_desactualizados:
+            mensaje = "Paquetes con actualizaciones disponibles:\n\n"
+            for paquete in paquetes_desactualizados:
+                mensaje += f"{paquete['name']} (installed: {paquete['version']}, latest: {paquete['latest_version']})\n"
+            root.after(0, lambda: messagebox.showinfo("Actualizaciones disponibles", mensaje))
+        else:
+            root.after(0, lambda: messagebox.showinfo("Actualizaciones", "Todos los paquetes están actualizados."))
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al verificar actualizaciones: {e.stderr}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
+# Botón para verificar actualizaciones
+boton_verificar_actualizaciones = CTkButton(frame_mis_paquetes_instalados, text="Verificar Actualizaciones", command=verificar_actualizaciones)
+boton_verificar_actualizaciones.pack(pady=10)
 
-def venta_producto(name,ventana__producto):
-    # Calcular venta total
-    with open(file_name, "r") as file:
-        lines = file.readlines()[1:]  # Lee todas las líneas del archivo excepto la primera
-        total = 0
-        for line in lines:
-            if name in line:
-                columnas = line.strip().split(",")
-                cantidad = int(columnas[1])
-                precio = float(columnas[2])
-                total += cantidad * precio
-                venta_label = Label(ventana__producto, text=f"El total de {name} es: {total}")
-                venta_label.pack()
-                return name
-        venta_label = Label(ventana__producto, text=f"producto no encontrado")
-        venta_label.pack()
+# Función para instalar desde requirements.txt
+def instalar_desde_requirements():
+    filename = filedialog.askopenfilename(filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+    if filename:
+        barra_de_carga(frame_derecho)
+        run_in_background(instalar_desde_requirements_thread, filename)
 
+def instalar_desde_requirements_thread(filename):
+    try:
+        result = subprocess.run(['pip', 'install', '-r', filename], capture_output=True, text=True, check=True)
+        root.after(0, lambda: messagebox.showinfo("Instalación", "Paquetes instalados correctamente desde requirements.txt"))
+        root.after(0, actualizar_mis_paquetes)
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al instalar desde requirements.txt: {e.stderr}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
-def actualizar_producto(nombre_producto,precio,cantidad):
-    nueva_lista = []
-    with open(file_name, "r+") as file:
-        lines = file.readlines()
-        for line in lines:
-            if nombre_producto not in line:
-                nueva_lista.append(line)
-        # Rebobinar el archivo al inicio
-        file.seek(0)
-        # Eliminar todas las líneas que contengan el producto
-        for line in nueva_lista:
-            file.write(line)
-        file.write(f"{nombre_producto}, {cantidad}, {precio}\n")
-        # Eliminar líneas vacías al final del archivo
-        file.truncate()
+# Botón para instalar desde requirements.txt
+boton_instalar_requirements = CTkButton(frame_derecho, text="Instalar desde requirements.txt", command=instalar_desde_requirements)
+boton_instalar_requirements.pack(pady=10)
 
-def ventana_actualizar_producto():
-    ventana_actualizar = Toplevel()
-    ventana_actualizar.geometry("200x200")
-    
-    lbl1 = Label(ventana_actualizar,text="Ingrese el nombre del producto:")
-    lbl1.pack()
-    #campo donde poner nombre del producto
-    name = Entry(ventana_actualizar)
-    name.pack()
-    
-    lbl2 = Label(ventana_actualizar,text="Cantidad vendida: ")
-    lbl2.pack()
-    
-    #campo donde poner la cantidad del producto
-    cantidad = Entry(ventana_actualizar)
-    cantidad.pack()
-    
-    lbl3 = Label(ventana_actualizar,text="precio")
-    lbl3.pack()
-    
-    #campo para poner el precio del objeto
-    precio = Entry(ventana_actualizar)
-    precio.pack()
-    
-    #boton para escribir todo los datos del objeto en el archivo
-    sumbit = Button(ventana_actualizar,text="sumbit", command=lambda: actualizar_producto(name.get(),cantidad.get(),precio.get()))
-    sumbit.pack()
+# Función para mostrar información detallada del paquete
+def mostrar_info_paquete(event):
+    seleccion = mis_paquetes_instalados.curselection()
+    if seleccion:
+        paquete = mis_paquetes_instalados.get(seleccion)
+        nombre_paquete = paquete.split('==')[0]
+        barra_de_carga(frame_mis_paquetes_instalados)
+        run_in_background(mostrar_info_paquete_thread, nombre_paquete)
 
-def salir():
-    ventana_principal.destroy()
+def mostrar_info_paquete_thread(nombre_paquete):
+    try:
+        result = subprocess.run(['pip', 'show', nombre_paquete], capture_output=True, text=True, check=True)
+        info = result.stdout
+        root.after(0, lambda: messagebox.showinfo(f"Información de {nombre_paquete}", info))
+    except subprocess.CalledProcessError as e:
+        root.after(0, lambda: messagebox.showerror("Error", f"Error al obtener información del paquete: {e.stderr}"))
+    finally:
+        root.after(0, lambda: lbl_general.destroy())
 
-ventana_principal = Tk()
-ventana_principal.geometry("600x400")
-ventana_principal.title("Gestor de productos y ventas")
-ventana_principal.config(bg="#D0D3D3")
+# Vincular el evento de doble clic en la lista de paquetes instalados
+mis_paquetes_instalados.bind('<Double-1>', mostrar_info_paquete)
 
+# Actualizar la lista de paquetes y mis paquetes al iniciar la aplicación
+actualizar_list_paquetes_instalados()
+actualizar_mis_paquetes()
 
-btn1 = Button(ventana_principal, text="Agregar objeto", command=agregar_objeto)
-btn1.place(x="310px",y="26px",height="55px",width="187px")
-btn1.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-
-btn2 = Button(ventana_principal, text="mostrar productos", command=mostrar_productos)
-btn2.place(x="505px",y="26px",height="55px",width="187px")
-btn2.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn3 = Button(ventana_principal, text="eliminar producto", command=ventana_para_borrar)
-btn3.place(x="310px",y="118px",height="55px",width="187px")
-btn3.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn4 = Button(ventana_principal, text="consulta  producto", command=ventana_consulta_producto)
-btn4.place(x="505px",y="118px",height="55px",width="187px")
-btn4.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn5 = Button(ventana_principal, text="venta total", command=lambda: venta_total(ventana_principal))
-btn5.place(x="310px",y="210px",height="55px",width="187px")
-btn5.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn6 = Button(ventana_principal, text="venta por producto", command=ventana_venta_producto)
-btn6.place(x="505px",y="210px",height="55px",width="187px")
-btn6.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn7 = Button(ventana_principal, text="actualizar producto", command=ventana_actualizar_producto)
-btn7.place(x="310px",y="302px",height="55px",width="187px")
-btn7.config(bg="#4CAF50", fg="white", font=("Arial", 14), width=20, height=2)
-
-btn8 = Button(ventana_principal, text="exit", command=salir)
-btn8.place(x="505px",y="302px",height="55px",width="187px")
-btn8.config(bg="#E63D3D",fg="black")
-
-
-
-
-
-ventana_principal.mainloop()
+# Iniciar la aplicación
+root.mainloop()
