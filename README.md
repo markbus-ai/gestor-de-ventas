@@ -39,7 +39,7 @@ Este es un proyecto de gestión de productos y ventas desarrollado en Python con
 2.Navega al directorio del proyecto:
 
   ```bash
-  cd Gestor-de-Productos-y-Ventas
+  cd gestor-de-ventas
   ```
 3.Ejecuta el programa:
 ```bash
